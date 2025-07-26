@@ -76,6 +76,15 @@ jobs:
           echo "WHEEL_CUDA_VERSION=$(echo ${{ matrix.cuda-version }} | awk -F \. {'print $1'})" >> $GITHUB_ENV
           echo "MATRIX_PYTHON_VERSION=$(echo ${{ matrix.python-version }} | awk -F \. {'print $1 $2'})" >> $GITHUB_ENV
 
+      - name: Set up environment variables
+        run: |
+          export TORCH_CUDA_VERSION=$(python -c "from os import environ as env; \
+              minv = {'2.4': 118, '2.5': 118, '2.6': 118, '2.7': 118}['${{ env.MATRIX_TORCH_VERSION }}']; \
+              maxv = {'2.4': 124, '2.5': 124, '2.6': 126, '2.7': 128}['${{ env.MATRIX_TORCH_VERSION }}']; \
+              print(minv if int('${{ env.MATRIX_TORCH_VERSION }}') < 120 else maxv)" \
+            )
+          echo "TORCH_CUDA_VERSION=${TORCH_CUDA_VERSION}" >> $GITHUB_ENV
+
       - name: Free up disk space
         if: ${{ runner.os == 'Linux' }}
         # https://github.com/easimon/maximize-build-space/blob/master/action.yml
@@ -139,11 +148,12 @@ jobs:
       - name: Build wheel
         env:
           CIBW_DEBUG_TRACEBACK: 1
-          CIBW_BUILD_VERBOSITY: 1
+          CIBW_BUILD_VERBOSITY: 3
           CIBW_BUILD: "cp${{ matrix.python-version }}-*"
-          CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} MATRIX_CUDA_VERSION=${{ env.MATRIX_CUDA_VERSION }} MATRIX_TORCH_VERSION=${{ env.MATRIX_TORCH_VERSION }} WHEEL_CUDA_VERSION=${{ env.WHEEL_CUDA_VERSION }} MATRIX_PYTHON_VERSION=${{ env.MATRIX_PYTHON_VERSION }}"
+          CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} MATRIX_CUDA_VERSION=${{ env.MATRIX_CUDA_VERSION }} MATRIX_TORCH_VERSION=${{ env.MATRIX_TORCH_VERSION }} WHEEL_CUDA_VERSION=${{ env.WHEEL_CUDA_VERSION }} MATRIX_PYTHON_VERSION=${{ env.MATRIX_PYTHON_VERSION }} TORCH_CUDA_VERSION=${{ env.TORCH_CUDA_VERSION }}"
           CIBW_MANYLINUX_X86_64_IMAGE: "quay.io/pypa/manylinux_2_28_x86_64"
           CIBW_BEFORE_ALL: |
+            set -x
             yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
             yum clean all 
             yum -y install cuda-toolkit
@@ -159,11 +169,7 @@ jobs:
             # e.g. we can have system CUDA version being 11.7 but if torch==1.12 then we need to download the wheel from cu116
             # see https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix
             # This code is ugly, maybe there's a better way to do this.
-            export TORCH_CUDA_VERSION=$(python -c "from os import environ as env; \
-              minv = {'2.4': 118, '2.5': 118, '2.6': 118, '2.7': 118}[env['MATRIX_TORCH_VERSION']]; \
-              maxv = {'2.4': 124, '2.5': 124, '2.6': 126, '2.7': 128}[env['MATRIX_TORCH_VERSION']]; \
-              print(minv if int(env['MATRIX_CUDA_VERSION']) < 120 else maxv)" \
-            )
+            
             if [[ ${{ matrix.torch-version }} == *"dev"* ]]; then
               # pip install --no-cache-dir --pre torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}
               # Can't use --no-deps because we need cudnn etc.
@@ -180,6 +186,7 @@ jobs:
             python -c "import torch; print('CUDA:', torch.version.cuda)"
             python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
         run: |
+          set -x
           # We want setuptools >= 49.6.0 otherwise we can't compile the extension if system CUDA version is 11.7 and pytorch cuda version is 11.6
           # https://github.com/pytorch/pytorch/blob/664058fa83f1d8eede5d66418abff6e20bd76ca8/torch/utils/cpp_extension.py#L810
           # However this still fails so I'm using a newer version of setuptools
@@ -197,6 +204,11 @@ jobs:
         shell: bash
 
       - name: Log Built Wheels
+        if: failure()
+        run: cat wheelhouse/*/build.log || true
+
+      - name: List Built Wheels
+        if: success()
         run: |
           ls dist
 
