@@ -67,9 +67,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Set up cibuildwheel
-        run: pip install cibuildwheel==2.23.3
-
       - name: Set CUDA and PyTorch versions
         run: |
           # export variables into the hostedrunner environment
@@ -82,13 +79,14 @@ jobs:
               maxv = {'2.4': 124, '2.5': 124, '2.6': 126, '2.7': 128}['${MATRIX_TORCH_VERSION}']; \
               print(minv if int(${MATRIX_CUDA_VERSION}) < 120 else maxv)" \
             )
+          export MAX_JOBS=$([ "$MATRIX_CUDA_VERSION" == "129" ] && echo 1 || echo 2)
           # Write variables to the GitHub environment
           echo "MATRIX_CUDA_VERSION=${MATRIX_CUDA_VERSION}" >> $GITHUB_ENV
           echo "MATRIX_TORCH_VERSION=${MATRIX_TORCH_VERSION}" >> $GITHUB_ENV
           echo "WHEEL_CUDA_VERSION=${WHEEL_CUDA_VERSION}" >> $GITHUB_ENV
           echo "MATRIX_PYTHON_VERSION=${MATRIX_PYTHON_VERSION}" >> $GITHUB_ENV
           echo "TORCH_CUDA_VERSION=${TORCH_CUDA_VERSION}" >> $GITHUB_ENV
-          echo "BUILD_MAX_JOBS=$([ "$MATRIX_CUDA_VERSION" == "129" ] && echo 1 || echo 2)" >> $GITHUB_ENV
+          echo "MAX_JOBS=$MAX_JOBS" >> $GITHUB_ENV
 
       - name: Free up disk space
         if: ${{ runner.os == 'Linux' }}
@@ -105,58 +103,36 @@ jobs:
         with:
           swap-size-gb: 10
 
-      # - name: Install CUDA ${{ matrix.cuda-version }}
-      #   if: ${{ matrix.cuda-version != 'cpu' }}
-      #   uses: Jimver/cuda-toolkit@v0.2.26
-      #   id: cuda-toolkit
-      #   with:
-      #     cuda: ${{ matrix.cuda-version }}
-      #     linux-local-args: '["--toolkit"]'
-      #     # default method is "local", and we're hitting some error with caching for CUDA 11.8 and 12.1
-      #     # method: ${{ (matrix.cuda-version == '11.8.0' || matrix.cuda-version == '12.1.0') && 'network' || 'local' }}
-      #     method: 'network'
-      #     sub-packages: '["nvcc"]'
-
-      # - name: Install PyTorch ${{ matrix.torch-version }}+cu${{ matrix.cuda-version }}
-      #   run: |
-      #     pip install --upgrade pip
-      #     # With python 3.13 and torch 2.5.1, unless we update typing-extensions, we get error
-      #     # AttributeError: attribute '__default__' of 'typing.ParamSpec' objects is not writable
-      #     pip install typing-extensions==4.12.2
-      #     # We want to figure out the CUDA version to download pytorch
-      #     # e.g. we can have system CUDA version being 11.7 but if torch==1.12 then we need to download the wheel from cu116
-      #     # see https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix
-      #     # This code is ugly, maybe there's a better way to do this.
-      #     export TORCH_CUDA_VERSION=$(python -c "from os import environ as env; \
-      #       minv = {'2.4': 118, '2.5': 118, '2.6': 118, '2.7': 118}[env['MATRIX_TORCH_VERSION']]; \
-      #       maxv = {'2.4': 124, '2.5': 124, '2.6': 126, '2.7': 128}[env['MATRIX_TORCH_VERSION']]; \
-      #       print(minv if int(env['MATRIX_CUDA_VERSION']) < 120 else maxv)" \
-      #     )
-      #     if [[ ${{ matrix.torch-version }} == *"dev"* ]]; then
-      #       # pip install --no-cache-dir --pre torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}
-      #       # Can't use --no-deps because we need cudnn etc.
-      #       # Hard-coding this version of pytorch-triton for torch 2.6.0.dev20241001
-      #       pip install jinja2
-      #       pip install https://download.pytorch.org/whl/nightly/pytorch_triton-3.1.0%2Bcf34004b8a-cp${MATRIX_PYTHON_VERSION}-cp${MATRIX_PYTHON_VERSION}-linux_x86_64.whl
-      #       pip install --no-cache-dir --pre https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}/torch-${{ matrix.torch-version }}%2Bcu${TORCH_CUDA_VERSION}-cp${MATRIX_PYTHON_VERSION}-cp${MATRIX_PYTHON_VERSION}-linux_x86_64.whl
-      #     else
-      #       pip install --no-cache-dir torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}
-      #     fi
-      #     nvcc --version
-      #     python --version
-      #     python -c "import torch; print('PyTorch:', torch.__version__)"
-      #     python -c "import torch; print('CUDA:', torch.version.cuda)"
-      #     python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
-      #   shell:
-      #     bash
-
       - name: Build wheel
+        uses: pypa/cibuildwheel@v3.1.1
         env:
-          CIBW_DEBUG_TRACEBACK: 1
-          CIBW_BUILD_VERBOSITY: 3
           CIBW_MANYLINUX_X86_64_IMAGE: "quay.io/pypa/manylinux_2_28_x86_64"
           CIBW_BUILD: "cp${{ env.MATRIX_PYTHON_VERSION }}-*"
-          CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} MATRIX_CUDA_VERSION=${{ env.MATRIX_CUDA_VERSION }} MATRIX_TORCH_VERSION=${{ env.MATRIX_TORCH_VERSION }} WHEEL_CUDA_VERSION=${{ env.WHEEL_CUDA_VERSION }} MATRIX_PYTHON_VERSION=${{ env.MATRIX_PYTHON_VERSION }} TORCH_CUDA_VERSION=${{ env.TORCH_CUDA_VERSION }} MAX_JOBS=${{ env.BUILD_MAX_JOBS }} NVCC_THREADS=2 "
+          CIBW_ENVIRONMENT_PASS_LINUX: "MATRIX_CUDA_VERSION MATRIX_TORCH_VERSION WHEEL_CUDA_VERSION MATRIX_PYTHON_VERSION TORCH_CUDA_VERSION MAX_JOBS"
+          CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} NVCC_THREADS=2"
+          CIBW_BEFORE_ALL: |
+            set -x
+            # Check environment variables
+            echo "========Checking environment variables========"
+            echo "MATRIX_CUDA_VERSION=${MATRIX_CUDA_VERSION}"
+            echo "MATRIX_TORCH_VERSION=${MATRIX_TORCH_VERSION}"
+            echo "WHEEL_CUDA_VERSION=${WHEEL_CUDA_VERSION}"
+            echo "MATRIX_PYTHON_VERSION=${MATRIX_PYTHON_VERSION}"
+            echo "TORCH_CUDA_VERSION=${TORCH_CUDA_VERSION}"
+            echo "MAX_JOBS=${MAX_JOBS}"
+            echo "FLASH_ATTENTION_FORCE_BUILD=${FLASH_ATTENTION_FORCE_BUILD}"
+            echo "FLASH_ATTENTION_FORCE_CXX11_ABI=${FLASH_ATTENTION_FORCE_CXX11_ABI}"
+            echo "========Checking environment variables========"
+            # Install CUDA toolkit
+            dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
+            dnf clean all
+            until dnf -y install cuda-toolkit; do
+              echo "Retrying CUDA installation..."
+              sleep 10
+            done
+            ls -al /usr/local
+            export PATH=$PATH:/usr/local/cuda/bin
+            nvcc --version
           CIBW_BEFORE_BUILD: |
             # Install PyTorch ${{ matrix.torch-version }}+cu${{ matrix.cuda-version }}
             pip install --upgrade pip
@@ -192,32 +168,39 @@ jobs:
             python -c "import torch; print('PyTorch:', torch.__version__)"
             python -c "import torch; print('CUDA:', torch.version.cuda)"
             python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
-          CIBW_BEFORE_ALL: |
-            set -x
-            dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
-            dnf clean all
-            until dnf -y install cuda-toolkit; do
-              echo "Retrying CUDA installation..."
-              sleep 10
-            done
-            ls -al /usr/local
-            export PATH=$PATH:/usr/local/cuda/bin
-            nvcc --version
-        run: |
-          python -m cibuildwheel --output-dir=dist
-          tmpname=cu${WHEEL_CUDA_VERSION}torch${MATRIX_TORCH_VERSION}cxx11abi${{ matrix.cxx11_abi }}
-          wheel_name=$(ls dist/*whl | xargs -n 1 basename | sed "s/-/+$tmpname-/2")
-          ls dist/*whl |xargs -I {} mv {} dist/${wheel_name}
-          echo "wheel_name=${wheel_name}" >> $GITHUB_ENV
-        shell: bash
+        with:
+          output-dir: dist
 
       - name: List Built Wheels
         run: |
           ls dist
 
+      - name: Rename wheel with CUDA tag
+        run: 
+          for whl in dist/*.whl; do
+            base=$(basename "$whl")
+            if [[ "$base" == *"+cu${WHEEL_CUDA_VERSION}"* ]]; then
+                echo "Skip $base, already has +cu${WHEEL_CUDA_VERSION}"
+                continue
+            fi
+            parts=($(python -c "import re;m=re.match(r'^([\w\d_]+)-([0-9a-zA-Z_.!]+)(.*\.whl)$','$base');print(m.group(1), m.group(2), m.group(3))"))
+            newname="${parts[0]}-${parts[1]}+cu${WHEEL_CUDA_VERSION}${parts[2]}"
+            echo "Copy $base -> $newname"
+            cp -f dist/"$base" dist/"$newname"
+            echo ---------------
+          done
+        shell: bash
+
+      - name: Get built wheel name
+        id: get_wheel_name
+        run: |
+          wheel_name=$(ls dist/*+cu${WHEEL_CUDA_VERSION}*.whl | xargs -n 1 basename | head -n 1)
+          echo "wheel_name=${wheel_name}" >> $GITHUB_OUTPUT
+        shell: bash
+
       - name: Get the tag version
         id: extract_branch
-        run: echo ::set-output name=branch::${GITHUB_REF#refs/tags/}
+        run: echo "branch=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Get Release with tag
         id: get_current_release
@@ -234,8 +217,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.get_current_release.outputs.upload_url }}
-          asset_path: ./dist/${{env.wheel_name}}
-          asset_name: ${{env.wheel_name}}
+          asset_path: ./dist/${{ steps.get_wheel_name.outputs.wheel_name }}
+          asset_name: ${{ steps.get_wheel_name.outputs.wheel_name }}
           asset_content_type: application/*
 
   # publish_package:
