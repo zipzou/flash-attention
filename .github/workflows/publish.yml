@@ -66,6 +66,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Set up cibuildwheel
+        run: pip install cibuildwheel==2.23.3
+
       - name: Set CUDA and PyTorch versions
         run: |
           echo "MATRIX_CUDA_VERSION=$(echo ${{ matrix.cuda-version }} | awk -F \. {'print $1 $2'})" >> $GITHUB_ENV
@@ -132,9 +135,6 @@ jobs:
           python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
         shell:
           bash
-
-      - name: Install cibuildwheel
-        run: pip install cibuildwheel==2.23.3
 
       - name: Build wheel
         run: |
