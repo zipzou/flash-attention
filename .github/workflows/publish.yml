@@ -151,9 +151,9 @@ jobs:
           CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} MATRIX_CUDA_VERSION=${{ env.MATRIX_CUDA_VERSION }} MATRIX_TORCH_VERSION=${{ env.MATRIX_TORCH_VERSION }} WHEEL_CUDA_VERSION=${{ env.WHEEL_CUDA_VERSION }} MATRIX_PYTHON_VERSION=${{ env.MATRIX_PYTHON_VERSION }} TORCH_CUDA_VERSION=${{ env.TORCH_CUDA_VERSION }}"
           CIBW_BEFORE_ALL: |
             set -x
-            yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
-            yum clean all 
-            yum -y install cuda-toolkit
+            dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
+            dnf clean all
+            dnf -y install cuda-toolkit
             ls -al /usr/local
             export PATH=$PATH:/usr/local/cuda/bin
             nvcc --version
