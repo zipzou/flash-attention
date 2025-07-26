@@ -106,6 +106,8 @@ jobs:
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.1.1
         env:
+          CIBW_DEBUG_TRACEBACK: 1
+          CIBW_BUILD_VERBOSITY: 3
           CIBW_MANYLINUX_X86_64_IMAGE: "quay.io/pypa/manylinux_2_28_x86_64"
           CIBW_BUILD: "cp${{ env.MATRIX_PYTHON_VERSION }}-*"
           CIBW_ENVIRONMENT_PASS_LINUX: "MATRIX_CUDA_VERSION MATRIX_TORCH_VERSION WHEEL_CUDA_VERSION MATRIX_PYTHON_VERSION TORCH_CUDA_VERSION MAX_JOBS"
