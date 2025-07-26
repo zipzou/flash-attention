@@ -75,9 +75,6 @@ jobs:
           echo "MATRIX_TORCH_VERSION=$(echo ${{ matrix.torch-version }} | awk -F \. {'print $1 "." $2'})" >> $GITHUB_ENV
           echo "WHEEL_CUDA_VERSION=$(echo ${{ matrix.cuda-version }} | awk -F \. {'print $1'})" >> $GITHUB_ENV
           echo "MATRIX_PYTHON_VERSION=$(echo ${{ matrix.python-version }} | awk -F \. {'print $1 $2'})" >> $GITHUB_ENV
-
-      - name: Set up environment variables
-        run: |
           export TORCH_CUDA_VERSION=$(python -c "from os import environ as env; \
               minv = {'2.4': 118, '2.5': 118, '2.6': 118, '2.7': 118}['${{ env.MATRIX_TORCH_VERSION }}']; \
               maxv = {'2.4': 124, '2.5': 124, '2.6': 126, '2.7': 128}['${{ env.MATRIX_TORCH_VERSION }}']; \
@@ -161,6 +158,7 @@ jobs:
             nvcc --version
             # Install PyTorch ${{ matrix.torch-version }}+cu${{ matrix.cuda-version }}
             pip install --upgrade pip
+            python -c "from pip._internal.models.target_python import TargetPython; target_python = TargetPython(); print('\n'.join(map(str, target_python.get_sorted_tags())));"
             # With python 3.13 and torch 2.5.1, unless we update typing-extensions, we get error
             # AttributeError: attribute '__default__' of 'typing.ParamSpec' objects is not writable
             pip install typing-extensions==4.12.2
@@ -177,7 +175,7 @@ jobs:
               pip install https://download.pytorch.org/whl/nightly/pytorch_triton-3.1.0%2Bcf34004b8a-cp${MATRIX_PYTHON_VERSION}-cp${MATRIX_PYTHON_VERSION}-linux_x86_64.whl
               pip install --no-cache-dir --pre https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}/torch-${{ matrix.torch-version }}%2Bcu${TORCH_CUDA_VERSION}-cp${MATRIX_PYTHON_VERSION}-cp${MATRIX_PYTHON_VERSION}-linux_x86_64.whl
             else
-              pip install --no-cache-dir torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}
+              pip install --no-cache-dir torch==${{ matrix.torch-version }}+cu${{ matrix.cuda-version }} --index-url https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}
             fi
             nvcc --version
             python --version
@@ -191,7 +189,7 @@ jobs:
           # However this still fails so I'm using a newer version of setuptools
           pip install setuptools==75.8.0
           pip install ninja packaging wheel
-          export PATH=/usr/local/nvidia/bin:/usr/local/nvidia/lib64:$PATH
+          export PATH=/usr/local/cuda/bin:/usr/local/cuda/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64:$PATH
           export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
           # Limit MAX_JOBS otherwise the github runner goes OOM
           # nvcc 11.8 can compile with 2 jobs, but nvcc 12.3 goes OOM
@@ -202,12 +200,7 @@ jobs:
           echo "wheel_name=${wheel_name}" >> $GITHUB_ENV
         shell: bash
 
-      - name: Log Built Wheels
-        if: failure()
-        run: cat dist/*/build.log || true
-
       - name: List Built Wheels
-        if: success()
         run: |
           ls dist
 
