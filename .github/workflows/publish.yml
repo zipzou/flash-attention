@@ -39,6 +39,7 @@ jobs:
 
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
           # Using ubuntu-22.04 instead of 24.04 for more compatibility (glibc). Ideally we'd use the
           # manylinux docker image, but I haven't figured out how to install CUDA on manylinux.
@@ -156,18 +157,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: "quay.io/pypa/manylinux_2_28_x86_64"
           CIBW_BUILD: "cp${{ env.MATRIX_PYTHON_VERSION }}-*"
           CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} MATRIX_CUDA_VERSION=${{ env.MATRIX_CUDA_VERSION }} MATRIX_TORCH_VERSION=${{ env.MATRIX_TORCH_VERSION }} WHEEL_CUDA_VERSION=${{ env.WHEEL_CUDA_VERSION }} MATRIX_PYTHON_VERSION=${{ env.MATRIX_PYTHON_VERSION }} TORCH_CUDA_VERSION=${{ env.TORCH_CUDA_VERSION }} MAX_JOBS=${{ env.BUILD_MAX_JOBS }} NVCC_THREADS=2 "
-
-          CIBW_BEFORE_ALL: |
-            set -x
-            dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
-            dnf clean all
-            until dnf -y install cuda-toolkit; do
-              echo "Retrying CUDA installation..."
-              sleep 10
-            done
-            ls -al /usr/local
-            export PATH=$PATH:/usr/local/cuda/bin
-            nvcc --version
+          CIBW_BEFORE_BUILD: |
             # Install PyTorch ${{ matrix.torch-version }}+cu${{ matrix.cuda-version }}
             pip install --upgrade pip
 
@@ -192,6 +182,7 @@ jobs:
             # We want setuptools >= 49.6.0 otherwise we can't compile the extension if system CUDA version is 11.7 and pytorch cuda version is 11.6
             # https://github.com/pytorch/pytorch/blob/664058fa83f1d8eede5d66418abff6e20bd76ca8/torch/utils/cpp_extension.py#L810
             # However this still fails so I'm using a newer version of setuptools
+            pip install 'numpy<2.0'
             pip install setuptools==75.8.0
             pip install ninja packaging wheel
             export PATH=/usr/local/cuda/bin:/usr/local/cuda/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64:$PATH
@@ -201,6 +192,17 @@ jobs:
             python -c "import torch; print('PyTorch:', torch.__version__)"
             python -c "import torch; print('CUDA:', torch.version.cuda)"
             python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
+          CIBW_BEFORE_ALL: |
+            set -x
+            dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
+            dnf clean all
+            until dnf -y install cuda-toolkit; do
+              echo "Retrying CUDA installation..."
+              sleep 10
+            done
+            ls -al /usr/local
+            export PATH=$PATH:/usr/local/cuda/bin
+            nvcc --version
         run: |
           python -m cibuildwheel --output-dir=dist
           tmpname=cu${WHEEL_CUDA_VERSION}torch${MATRIX_TORCH_VERSION}cxx11abi${{ matrix.cxx11_abi }}
