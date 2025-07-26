@@ -71,7 +71,7 @@ jobs:
 
       - name: Set CUDA and PyTorch versions
         run: |
-          # export variables in the hostedrunner environment
+          # export variables into the hostedrunner environment
           export MATRIX_CUDA_VERSION=$(echo ${{ matrix.cuda-version }} | awk -F \. {'print $1 $2'})
           export MATRIX_TORCH_VERSION=$(echo ${{ matrix.torch-version }} | awk -F \. {'print $1 "." $2'})
           export WHEEL_CUDA_VERSION=$(echo ${{ matrix.cuda-version }} | awk -F \. {'print $1'})
@@ -81,12 +81,12 @@ jobs:
               maxv = {'2.4': 124, '2.5': 124, '2.6': 126, '2.7': 128}['${MATRIX_TORCH_VERSION}']; \
               print(minv if int(${MATRIX_CUDA_VERSION}) < 120 else maxv)" \
             )
-          # Write the variables to the GitHub environment
-          echo "MATRIX_CUDA_VERSION=${MATRIX_CUDA_VERSION}" >> $GITHUB_ENV}
-          echo "MATRIX_TORCH_VERSION=${MATRIX_TORCH_VERSION}" >> $GITHUB_ENV}
-          echo "WHEEL_CUDA_VERSION=${WHEEL_CUDA_VERSION}" >> $GITHUB_ENV}
-          echo "MATRIX_PYTHON_VERSION=${MATRIX_PYTHON_VERSION}" >> $GITHUB_ENV}
-          echo "TORCH_CUDA_VERSION=${TORCH_CUDA_VERSION}" >> $GITHUB_ENV}
+          # Write variables to the GitHub environment
+          echo "MATRIX_CUDA_VERSION=${MATRIX_CUDA_VERSION}" >> $GITHUB_ENV
+          echo "MATRIX_TORCH_VERSION=${MATRIX_TORCH_VERSION}" >> $GITHUB_ENV
+          echo "WHEEL_CUDA_VERSION=${WHEEL_CUDA_VERSION}" >> $GITHUB_ENV
+          echo "MATRIX_PYTHON_VERSION=${MATRIX_PYTHON_VERSION}" >> $GITHUB_ENV
+          echo "TORCH_CUDA_VERSION=${TORCH_CUDA_VERSION}" >> $GITHUB_ENV
 
       - name: Free up disk space
         if: ${{ runner.os == 'Linux' }}
