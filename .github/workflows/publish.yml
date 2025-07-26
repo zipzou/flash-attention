@@ -159,8 +159,7 @@ jobs:
             # https://github.com/pytorch/pytorch/blob/664058fa83f1d8eede5d66418abff6e20bd76ca8/torch/utils/cpp_extension.py#L810
             # However this still fails so I'm using a newer version of setuptools
             pip install 'numpy<2.0'
-            pip install setuptools==75.8.0
-            pip install ninja packaging wheel
+            pip install ninja packaging wheel setuptools
             export PATH=/usr/local/cuda/bin:/usr/local/cuda/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64:$PATH
             export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
             nvcc --version
