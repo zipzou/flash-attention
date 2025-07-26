@@ -65,6 +65,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel==3.1.1
 
       - name: Set CUDA and PyTorch versions
         run: |
@@ -144,7 +147,7 @@ jobs:
           export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
           # Limit MAX_JOBS otherwise the github runner goes OOM
           # nvcc 11.8 can compile with 2 jobs, but nvcc 12.3 goes OOM
-          MAX_JOBS=$([ "$MATRIX_CUDA_VERSION" == "129" ] && echo 1 || echo 2) NVCC_THREADS=2 FLASH_ATTENTION_FORCE_BUILD="TRUE" FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi}} python setup.py bdist_wheel --dist-dir=dist
+          MAX_JOBS=$([ "$MATRIX_CUDA_VERSION" == "129" ] && echo 1 || echo 2) NVCC_THREADS=2 FLASH_ATTENTION_FORCE_BUILD="TRUE" FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi}} python -m cbuildwheel --output-dir=dist
           tmpname=cu${WHEEL_CUDA_VERSION}torch${MATRIX_TORCH_VERSION}cxx11abi${{ matrix.cxx11_abi }}
           wheel_name=$(ls dist/*whl | xargs -n 1 basename | sed "s/-/+$tmpname-/2")
           ls dist/*whl |xargs -I {} mv {} dist/${wheel_name}
@@ -177,36 +180,36 @@ jobs:
           asset_name: ${{env.wheel_name}}
           asset_content_type: application/*
 
-  publish_package:
-    name: Publish package
-    needs: [build_wheels]
+  # publish_package:
+  #   name: Publish package
+  #   needs: [build_wheels]
 
-    runs-on: ubuntu-latest
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          pip install ninja packaging wheel twine
-          # Install latest setuptools with support for pypi metadata 2.2 (improved compat w/ uv)
-          pip install setuptools==75.8.0
-          # We don't want to download anything CUDA-related here
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+  #     - name: Install dependencies
+  #       run: |
+  #         pip install ninja packaging wheel twine
+  #         # Install latest setuptools with support for pypi metadata 2.2 (improved compat w/ uv)
+  #         pip install setuptools==75.8.0
+  #         # We don't want to download anything CUDA-related here
+  #         pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Build core package
-        env:
-          FLASH_ATTENTION_SKIP_CUDA_BUILD: "TRUE"
-        run: |
-          python setup.py sdist --dist-dir=dist
+  #     - name: Build core package
+  #       env:
+  #         FLASH_ATTENTION_SKIP_CUDA_BUILD: "TRUE"
+  #       run: |
+  #         python setup.py sdist --dist-dir=dist
 
-      - name: Deploy
-        env:
-          TWINE_USERNAME: "__token__"
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          python -m twine upload dist/*
+  #     - name: Deploy
+  #       env:
+  #         TWINE_USERNAME: "__token__"
+  #         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+  #       run: |
+  #         python -m twine upload dist/*
