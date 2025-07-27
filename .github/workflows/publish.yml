@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Get the tag version
         id: extract_branch
-        run: echo ::set-output name=branch::${GITHUB_REF#refs/tags/}
+        run: echo "branch=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Create Release
@@ -110,10 +110,11 @@ jobs:
         env:
           CIBW_DEBUG_TRACEBACK: 1
           CIBW_BUILD_VERBOSITY: 3
-          CIBW_MANYLINUX_X86_64_IMAGE: "quay.io/pypa/manylinux_2_28_x86_64"
-          CIBW_BUILD: "cp${{ env.MATRIX_PYTHON_VERSION }}-*"
+          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
+          CIBW_BUILD: "cp${{ env.MATRIX_PYTHON_VERSION }}-manylinux_x86_64"
+          CIBW_SKIP: "*-win *-mus *-macosx"
           CIBW_ENVIRONMENT_PASS_LINUX: "MATRIX_CUDA_VERSION MATRIX_TORCH_VERSION WHEEL_CUDA_VERSION MATRIX_PYTHON_VERSION TORCH_CUDA_VERSION WHEEL_BUILD_TAG MAX_JOBS"
-          CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} NVCC_THREADS=2"
+          CIBW_ENVIRONMENT: "FLASH_ATTENTION_FORCE_BUILD=TRUE FLASH_ATTENTION_FORCE_CXX11_ABI=${{ matrix.cxx11_abi }} NVCC_THREADS=2 AUDITWHEEL_PLAT=manylinux_2_28_x86_64"
           CIBW_BUILD_FRONTEND: "pip"
           CIBW_BEFORE_ALL: |
             set -x
@@ -132,8 +133,15 @@ jobs:
             # Install CUDA toolkit
             dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
             dnf clean all
+            RETRIES=5
+            COUNT=0
             until dnf -y install cuda-toolkit; do
-              echo "Retrying CUDA installation..."
+              if [[ $COUNT -ge $RETRIES ]]; then
+                echo "Failed after $RETRIES attempts, aborting."
+                exit 1
+              fi
+              COUNT=$((COUNT+1))
+              echo "Retrying CUDA installation($COUNT/$RETRIES)..."
               sleep 10
             done
             ls -al /usr/local
@@ -179,6 +187,7 @@ jobs:
           output-dir: dist
 
       - name: List Built Wheels
+        if: ${{ always() }}
         run: |
           ls dist
 
