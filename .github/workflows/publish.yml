@@ -13,28 +13,8 @@ on:
       - v*
 
 jobs:
-
-  setup_release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get the tag version
-        id: extract_branch
-        run: echo "branch=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.extract_branch.outputs.branch }}
-          release_name: ${{ steps.extract_branch.outputs.branch }}
-
   build_wheels:
     name: Build Wheel
-    needs: setup_release
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -186,13 +166,13 @@ jobs:
         with:
           output-dir: dist
 
-      - name: List Built Wheels
+      - name: List built wheels
         if: ${{ always() }}
         run: |
-          ls dist
+          ls -lh dist/
 
-      - name: Rename wheel with CUDA tag
-        run: 
+      - name: Add built_tag for the built wheel
+        run: |
           for whl in dist/*.whl; do
             wheelname=$(basename "$whl")
             newname=$(python -c "print('-'.join([*'$wheelname'.split('-')[:2], '${{ env.WHEEL_BUILD_TAG }}', *'$wheelname'.split('-')[-3:]]))")
@@ -202,35 +182,15 @@ jobs:
           done
         shell: bash
 
-      - name: Get built wheel name
-        id: get_wheel_name
-        run: |
-          wheel_name=$(ls dist/*.whl | xargs -n 1 basename | head -n 1)
-          echo "wheel_name=${wheel_name}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Get the tag version
-        id: extract_branch
-        run: echo "branch=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Get Release with tag
-        id: get_current_release
-        uses: joutvhu/get-release@v1
-        with:
-          tag_name: ${{ steps.extract_branch.outputs.branch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Release Asset
+      - name: Release
         id: upload_release_asset
-        uses: actions/upload-release-asset@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.get_current_release.outputs.upload_url }}
-          asset_path: ./dist/${{ steps.get_wheel_name.outputs.wheel_name }}
-          asset_name: ${{ steps.get_wheel_name.outputs.wheel_name }}
-          asset_content_type: application/*
+          files: dist/*.whl
+      
+      # TODO: upload wheels to pypi
 
   publish_package:
     name: Publish package
